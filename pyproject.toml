@@ -1,0 +1,15 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "openbb-kapy"
+version = "0.1.0"
+description = "Kapy custom provider for OpenBB"
+authors = ["SS <ss@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+
+[tool.poetry.plugins."openbb_provider_extension"]
+kapy = "openbb_kapy:kapy_provider"
