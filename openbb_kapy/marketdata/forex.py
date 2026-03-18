@@ -1,0 +1,49 @@
+"""Forex snapshot fetcher (provider-style helper).
+
+Provides:
+- DXY estimate (from DX-Y.NYB latest close)
+- EUR/USD spot proxy (from EURUSD=X latest close)
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+import requests
+
+
+class ForexFetchError(RuntimeError):
+    """Raised when forex snapshot fetch fails."""
+
+
+def _stooq_last_close(symbol: str) -> float | None:
+    # Stooq lightweight CSV endpoint: SYMBOL,DATE,TIME,OPEN,HIGH,LOW,CLOSE,VOLUME,...
+    url = f"https://stooq.com/q/l/?s={symbol}&i=d"
+    resp = requests.get(url, timeout=15)
+    resp.raise_for_status()
+    parts = [p.strip() for p in resp.text.strip().split(",")]
+    if len(parts) < 7:
+        return None
+    close = parts[6]
+    if close.upper() == "N/D" or close == "":
+        return None
+    try:
+        return float(close)
+    except Exception:
+        return None
+
+
+def fetch_forex_snapshot() -> dict[str, Any]:
+    # DX.F approximates DXY futures close; EURUSD from spot pair.
+    dxy = _stooq_last_close("dx.f")
+    eurusd = _stooq_last_close("eurusd")
+    if dxy is None and eurusd is None:
+        raise ForexFetchError("both DXY and EURUSD unavailable")
+
+    return {
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "dxy_estimate": dxy,
+        "eur_usd": eurusd,
+        "_source": "kapy-provider:stooq",
+    }
