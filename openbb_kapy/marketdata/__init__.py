@@ -9,6 +9,7 @@ from .exchange_balance import fetch_exchange_balance_snapshot
 from .forex import fetch_forex_snapshot
 from .mining import fetch_mining_snapshot
 from .onchain import fetch_onchain_snapshot
+from .sentiment import fetch_sentiment_snapshot
 from .stablecoins_usde import fetch_stablecoins_usde_snapshot
 from .volume import fetch_volume_snapshot
 
@@ -22,6 +23,7 @@ __all__ = [
     "fetch_forex_snapshot",
     "fetch_mining_snapshot",
     "fetch_onchain_snapshot",
+    "fetch_sentiment_snapshot",
     "fetch_stablecoins_usde_snapshot",
     "fetch_volume_snapshot",
 ]

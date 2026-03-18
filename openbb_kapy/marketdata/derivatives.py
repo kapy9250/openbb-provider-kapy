@@ -2,6 +2,7 @@
 
 Current source strategy:
 - Binance public API (funding / long-short / open-interest)
+- Coinalyze API (liquidations)
 
 Returns a normalized payload aligned with legacy market-data shape so downstream
 pipeline migration can be incremental.
@@ -9,6 +10,7 @@ pipeline migration can be incremental.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -22,8 +24,10 @@ class DerivativesFetchError(RuntimeError):
     """Raised when derivatives fetch fails."""
 
 
-def _get_json(url: str, timeout: int = 15) -> Any:
-    resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
+def _get_json(url: str, timeout: int = 15, **kwargs: Any) -> Any:
+    headers = kwargs.pop("headers", {})
+    headers.setdefault("User-Agent", UA)
+    resp = requests.get(url, headers=headers, timeout=timeout, **kwargs)
     resp.raise_for_status()
     return resp.json()
 
@@ -103,6 +107,31 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
             )
     except Exception as e:  # pragma: no cover - network dependent
         errors.append(f"eth_oi: {e}")
+
+    # 4) Liquidations (Coinalyze)
+    try:
+        coinalyze_key = os.environ.get("OPENBB_COINALYZE_API_KEY", "")
+        if coinalyze_key:
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            liq = _get_json(
+                "https://api.coinalyze.net/v1/liquidation-history",
+                params={"symbols": "BTCUSD_PERP.A", "interval": "daily", "from": str(now_ts - 86400), "to": str(now_ts)},
+                headers={"api_key": coinalyze_key},
+            )
+            if isinstance(liq, list):
+                for item in liq:
+                    history = item.get("history") or []
+                    for h in history:
+                        out["coinalyze"]["liquidations"].append({
+                            "symbol": item.get("symbol", "BTCUSD_PERP.A"),
+                            "timestamp": h.get("t"),
+                            "long": h.get("l"),
+                            "short": h.get("s"),
+                        })
+        else:
+            errors.append("liquidations: OPENBB_COINALYZE_API_KEY not set")
+    except Exception as e:  # pragma: no cover - network dependent
+        errors.append(f"liquidations: {e}")
 
     has_core = bool(out["binance"]["btc_funding"] or out["binance"]["long_short"] or out["coinalyze"]["oi"])
     if not has_core:
