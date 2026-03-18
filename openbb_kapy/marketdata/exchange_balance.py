@@ -1,33 +1,80 @@
-"""Exchange-balance snapshot helper (transitional bridge).
+"""Exchange-balance snapshot helper (provider-native).
 
-NOTE:
-- Coinglass balance endpoint is JS-rendered and currently not exposed via a stable
-  unauthenticated JSON endpoint in this runtime.
-- As an interim migration step, this helper bridges legacy normalized raw output
-  from market-data (`raw/exchange-balance/latest.json`) into provider namespace.
+Data source:
+- Coinglass Balance page via Puppeteer (reusing existing market-data script)
 
-This keeps pipeline call-sites provider-first while preserving fallback behavior.
+No legacy raw bridge fallback.
 """
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
+import subprocess
 from typing import Any
+
+import requests
 
 
 class ExchangeBalanceFetchError(RuntimeError):
     """Raised when exchange balance fetch fails."""
 
 
-DEFAULT_RAW_PATH = Path("/workspace/market-data/raw/exchange-balance/latest.json")
+def _browser_ws_endpoint(cdp_http: str = "http://172.30.0.1:9222") -> str:
+    r = requests.get(f"{cdp_http}/json/version", timeout=10)
+    r.raise_for_status()
+    obj = r.json()
+    ws = obj.get("webSocketDebuggerUrl")
+    if not ws:
+        raise ExchangeBalanceFetchError("webSocketDebuggerUrl missing from CDP /json/version")
+    return str(ws)
 
 
-def fetch_exchange_balance_snapshot(raw_path: Path | None = None) -> dict[str, Any]:
-    path = raw_path or DEFAULT_RAW_PATH
-    if not path.exists():
-        raise ExchangeBalanceFetchError(f"legacy raw exchange-balance file missing: {path}")
+def fetch_exchange_balance_snapshot() -> dict[str, Any]:
+    ws = _browser_ws_endpoint()
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["_source"] = "kapy-provider:legacy-raw-bridge"
+    node_script = r"""
+const mod = require('/workspace/market-data/scripts/fetch-exchange-balance.js');
+(async()=>{
+  try {
+    const data = await mod.fetchAllBalances(process.env.WS_ENDPOINT);
+    console.log('__JSON__' + JSON.stringify(data));
+  } catch (e) {
+    console.log('__JSON__' + JSON.stringify({error: String(e?.message || e)}));
+    process.exit(2);
+  }
+})();
+"""
+
+    p = subprocess.run(
+        ["node", "-e", node_script],
+        capture_output=True,
+        text=True,
+        timeout=420,
+        env={**os.environ, **{"WS_ENDPOINT": ws}},
+    )
+
+    out = (p.stdout or "")
+    err = (p.stderr or "")
+
+    marker = "__JSON__"
+    payload_line = None
+    for line in out.splitlines()[::-1]:
+        if line.startswith(marker):
+            payload_line = line[len(marker) :]
+            break
+
+    if not payload_line:
+        raise ExchangeBalanceFetchError(f"no JSON payload from fetch script; rc={p.returncode}; stderr={err[:300]}")
+
+    payload = json.loads(payload_line)
+    if payload.get("error"):
+        raise ExchangeBalanceFetchError(f"fetch script error: {payload.get('error')}")
+
+    btc_err = (payload.get("btc") or {}).get("error")
+    eth_err = (payload.get("eth") or {}).get("error")
+    if btc_err or eth_err:
+        raise ExchangeBalanceFetchError(f"coinglass fetch errors: btc={btc_err}, eth={eth_err}")
+
+    payload["_source"] = "kapy-provider:coinglass-puppeteer"
     return payload
