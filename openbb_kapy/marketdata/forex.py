@@ -35,15 +35,17 @@ def _stooq_last_close(symbol: str) -> float | None:
 
 
 def fetch_forex_snapshot() -> dict[str, Any]:
-    # DX.F approximates DXY futures close; EURUSD from spot pair.
+    # DX.F approximates DXY futures close; EURUSD and USDJPY from spot pairs.
     dxy = _stooq_last_close("dx.f")
     eurusd = _stooq_last_close("eurusd")
-    if dxy is None and eurusd is None:
-        raise ForexFetchError("both DXY and EURUSD unavailable")
+    usdjpy = _stooq_last_close("usdjpy")
+    if dxy is None and eurusd is None and usdjpy is None:
+        raise ForexFetchError("DXY, EURUSD and USDJPY all unavailable")
 
     return {
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "dxy_estimate": dxy,
         "eur_usd": eurusd,
+        "usd_jpy": usdjpy,
         "_source": "kapy-provider:stooq",
     }
