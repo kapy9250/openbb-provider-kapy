@@ -1,7 +1,8 @@
 """Exchange-balance snapshot helper (provider-native).
 
 Data source:
-- Coinglass Balance page via Puppeteer (reusing existing market-data script)
+- Coinglass Balance page via Puppeteer
+- Browser script: /workspace/openbb-decision-pipeline/browser/fetch_exchange_balance.js
 
 No legacy raw bridge fallback.
 """
@@ -34,7 +35,7 @@ def fetch_exchange_balance_snapshot() -> dict[str, Any]:
     ws = _browser_ws_endpoint()
 
     node_script = r"""
-const mod = require('/workspace/market-data/scripts/fetch-exchange-balance.js');
+const mod = require('/workspace/openbb-decision-pipeline/browser/fetch_exchange_balance.js');
 (async()=>{
   try {
     const data = await mod.fetchAllBalances(process.env.WS_ENDPOINT);
