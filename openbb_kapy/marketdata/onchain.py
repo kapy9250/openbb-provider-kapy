@@ -58,6 +58,17 @@ def fetch_onchain_snapshot() -> dict[str, Any]:
         out["errors"].append({"source": "mempool.space/mempool", "error": str(e)})
 
     try:
+        charts = _get_json(
+            "https://api.blockchain.info/charts/n-unique-addresses"
+            "?timespan=2days&format=json&sampled=false"
+        )
+        values = charts.get("values") or []
+        if values:
+            btc["active_addresses"] = values[-1].get("y")
+    except Exception as e:  # pragma: no cover
+        out["errors"].append({"source": "blockchain.info/charts/n-unique-addresses", "error": str(e)})
+
+    try:
         blocks = _get_json("https://mempool.space/api/v1/blocks")
         if isinstance(blocks, list) and blocks:
             b = blocks[0]

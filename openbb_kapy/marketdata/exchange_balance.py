@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -21,7 +22,8 @@ class ExchangeBalanceFetchError(RuntimeError):
     """Raised when exchange balance fetch fails."""
 
 
-def _browser_ws_endpoint(cdp_http: str = "http://172.30.0.1:9222") -> str:
+def _browser_ws_endpoint(cdp_http: str | None = None) -> str:
+    cdp_http = cdp_http or os.getenv("COINGLASS_CDP_HTTP") or os.getenv("CDP_HTTP") or "http://localhost:19222"
     r = requests.get(f"{cdp_http}/json/version", timeout=10)
     r.raise_for_status()
     obj = r.json()
@@ -31,11 +33,33 @@ def _browser_ws_endpoint(cdp_http: str = "http://172.30.0.1:9222") -> str:
     return str(ws)
 
 
+def _fetch_script_path() -> Path:
+    candidates = []
+    env_path = os.getenv("COINGLASS_EXCHANGE_BALANCE_FETCH_JS")
+    if env_path:
+        candidates.append(Path(env_path))
+
+    here = Path(__file__).resolve()
+    candidates.extend(
+        [
+            Path("/workspace/openbb-decision-pipeline/browser/fetch_exchange_balance.js"),
+            here.parents[3] / "openbb-decision-pipeline/browser/fetch_exchange_balance.js",
+        ]
+    )
+    for path in candidates:
+        if path.exists():
+            return path
+    raise ExchangeBalanceFetchError(
+        "fetch_exchange_balance.js not found; set COINGLASS_EXCHANGE_BALANCE_FETCH_JS"
+    )
+
+
 def fetch_exchange_balance_snapshot() -> dict[str, Any]:
     ws = _browser_ws_endpoint()
+    fetch_script = _fetch_script_path()
 
     node_script = r"""
-const mod = require('/workspace/openbb-decision-pipeline/browser/fetch_exchange_balance.js');
+const mod = require(process.env.FETCH_SCRIPT);
 (async()=>{
   try {
     const data = await mod.fetchAllBalances(process.env.WS_ENDPOINT);
@@ -52,7 +76,7 @@ const mod = require('/workspace/openbb-decision-pipeline/browser/fetch_exchange_
         capture_output=True,
         text=True,
         timeout=420,
-        env={**os.environ, **{"WS_ENDPOINT": ws}},
+        env={**os.environ, **{"WS_ENDPOINT": ws, "FETCH_SCRIPT": str(fetch_script)}},
     )
 
     out = (p.stdout or "")
