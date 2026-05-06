@@ -23,19 +23,136 @@ def _get_json(url: str) -> Any:
     return resp.json()
 
 
-def _coingecko_global() -> dict[str, Any]:
+def _as_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
     try:
-        d = _get_json("https://api.coingecko.com/api/v3/global").get("data") or {}
-        return {
-            "global": {
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _source_global(source: str, url: str, values: dict[str, Any]) -> dict[str, Any]:
+    out = {
+        "source": source,
+        "url": url,
+        "total_24h_volume_usd": _as_float(values.get("total_24h_volume_usd")),
+        "total_market_cap_usd": _as_float(values.get("total_market_cap_usd")),
+        "btc_dominance": _as_float(values.get("btc_dominance")),
+        "eth_dominance": _as_float(values.get("eth_dominance")),
+        "raw_updated_at": values.get("raw_updated_at"),
+    }
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def _coinpaprika_global() -> dict[str, Any]:
+    url = "https://api.coinpaprika.com/v1/global"
+    try:
+        d = _get_json(url) or {}
+        return _source_global(
+            "coinpaprika",
+            url,
+            {
+                "total_24h_volume_usd": d.get("volume_24h_usd"),
+                "total_market_cap_usd": d.get("market_cap_usd"),
+                "btc_dominance": d.get("bitcoin_dominance_percentage"),
+                "raw_updated_at": d.get("last_updated"),
+            },
+        )
+    except Exception:
+        return {}
+
+
+def _coingecko_global() -> dict[str, Any]:
+    url = "https://api.coingecko.com/api/v3/global"
+    try:
+        d = _get_json(url).get("data") or {}
+        return _source_global(
+            "coingecko",
+            url,
+            {
                 "total_24h_volume_usd": ((d.get("total_volume") or {}).get("usd")),
                 "total_market_cap_usd": ((d.get("total_market_cap") or {}).get("usd")),
                 "btc_dominance": ((d.get("market_cap_percentage") or {}).get("btc")),
                 "eth_dominance": ((d.get("market_cap_percentage") or {}).get("eth")),
-            }
-        }
+                "raw_updated_at": d.get("updated_at"),
+            },
+        )
     except Exception:
         return {}
+
+
+def _coinlore_global() -> dict[str, Any]:
+    url = "https://api.coinlore.net/api/global/"
+    try:
+        payload = _get_json(url) or []
+        d = payload[0] if isinstance(payload, list) and payload else {}
+        return _source_global(
+            "coinlore",
+            url,
+            {
+                "total_24h_volume_usd": d.get("total_volume"),
+                "total_market_cap_usd": d.get("total_mcap"),
+                "btc_dominance": d.get("btc_d"),
+                "eth_dominance": d.get("eth_d"),
+            },
+        )
+    except Exception:
+        return {}
+
+
+def _pct_diff(a: Any, b: Any) -> float | None:
+    x = _as_float(a)
+    y = _as_float(b)
+    if x is None or y is None or y == 0:
+        return None
+    return (x - y) / abs(y)
+
+
+def _crypto_global() -> dict[str, Any]:
+    sources = {
+        row["source"]: row
+        for row in (_coinpaprika_global(), _coingecko_global(), _coinlore_global())
+        if row.get("source")
+    }
+    if not sources:
+        return {}
+
+    # Keep CoinGecko as primary to preserve historical continuity in
+    # daily_volume_metrics; CoinPaprika/CoinLore are fallback and validation.
+    priority = ("coingecko", "coinpaprika", "coinlore")
+    fields = (
+        "total_24h_volume_usd",
+        "total_market_cap_usd",
+        "btc_dominance",
+        "eth_dominance",
+    )
+    selected: dict[str, Any] = {"sources": sources, "field_sources": {}}
+    for field in fields:
+        for source in priority:
+            value = sources.get(source, {}).get(field)
+            if value is not None:
+                selected[field] = value
+                selected["field_sources"][field] = source
+                break
+
+    selected["source"] = selected["field_sources"].get("total_market_cap_usd") or next(iter(sources))
+    selected["validation"] = {
+        "coinpaprika_vs_coingecko_total_market_cap_pct": _pct_diff(
+            sources.get("coinpaprika", {}).get("total_market_cap_usd"),
+            sources.get("coingecko", {}).get("total_market_cap_usd"),
+        ),
+        "coinpaprika_vs_coingecko_total_24h_volume_pct": _pct_diff(
+            sources.get("coinpaprika", {}).get("total_24h_volume_usd"),
+            sources.get("coingecko", {}).get("total_24h_volume_usd"),
+        ),
+        "coinpaprika_vs_coingecko_btc_dominance_pct": _pct_diff(
+            sources.get("coinpaprika", {}).get("btc_dominance"),
+            sources.get("coingecko", {}).get("btc_dominance"),
+        ),
+    }
+    selected["validation"] = {k: v for k, v in selected["validation"].items() if v is not None}
+    return {"global": selected}
 
 
 def _tokenized_gold() -> dict[str, Any]:
@@ -99,7 +216,7 @@ def fetch_volume_snapshot() -> dict[str, Any]:
         },
         "futures": {"by_category": {}},
         "crypto_volume": {
-            **_coingecko_global(),
+            **_crypto_global(),
             **_tokenized_gold(),
         },
         "dex_volume": _dex_volume(),
@@ -125,5 +242,5 @@ def fetch_volume_snapshot() -> dict[str, Any]:
     return {
         "timestamp": now,
         "data": data,
-        "_source": "kapy-provider:etf+coingecko+defillama",
+        "_source": "kapy-provider:etf+crypto-global-fallback+defillama",
     }
