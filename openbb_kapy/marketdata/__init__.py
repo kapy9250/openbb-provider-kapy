@@ -14,6 +14,7 @@ from .onchain_indicators import (
     fetch_bgeometrics_indicators,
     fetch_latest_bgeometrics_indicator,
 )
+from .options_skew import fetch_btc_options_skew_1m
 from .sentiment import fetch_sentiment_snapshot
 from .stablecoins_usde import fetch_stablecoins_usde_snapshot
 from .volume import fetch_volume_snapshot
@@ -31,6 +32,7 @@ __all__ = [
     "fetch_bgeometrics_indicator",
     "fetch_bgeometrics_indicators",
     "fetch_latest_bgeometrics_indicator",
+    "fetch_btc_options_skew_1m",
     "fetch_sentiment_snapshot",
     "fetch_stablecoins_usde_snapshot",
     "fetch_volume_snapshot",
