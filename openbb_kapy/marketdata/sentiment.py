@@ -12,20 +12,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
-
-
-UA = "Mozilla/5.0 KapyProvider/1.0"
+from .http import get_json
 
 
 class SentimentFetchError(RuntimeError):
     """Raised when sentiment fetch fails."""
-
-
-def _get_json(url: str, timeout: int = 15) -> Any:
-    resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def _safe_int(val: Any) -> int | None:
@@ -41,7 +32,7 @@ def fetch_sentiment_snapshot() -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        raw = _get_json("https://api.alternative.me/fng/?limit=7")
+        raw = get_json("https://api.alternative.me/fng/?limit=7")
     except Exception as e:
         raise SentimentFetchError(f"fear_greed fetch failed: {e}") from e
 

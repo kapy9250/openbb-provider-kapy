@@ -8,17 +8,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 class MiningFetchError(RuntimeError):
     """Raised when mining snapshot fetch fails."""
-
-
-def _get_json(url: str) -> Any:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def fetch_mining_snapshot() -> dict[str, Any]:
@@ -30,7 +24,7 @@ def fetch_mining_snapshot() -> dict[str, Any]:
     data = out["data"]
 
     # Hashrate + difficulty
-    hash_diff = _get_json("https://mempool.space/api/v1/mining/hashrate/1m")
+    hash_diff = get_json("https://mempool.space/api/v1/mining/hashrate/1m", timeout=20)
     data["current_hashrate"] = (hash_diff.get("currentHashrate") or 0) / 1e18
     data["current_difficulty"] = (hash_diff.get("currentDifficulty") or 0) / 1e12
 
@@ -41,7 +35,7 @@ def fetch_mining_snapshot() -> dict[str, Any]:
             data["hashrate_1m_change"] = ((data["current_hashrate"] - month_ago) / month_ago) * 100.0
 
     # Pools
-    pools = _get_json("https://mempool.space/api/v1/mining/pools/24h")
+    pools = get_json("https://mempool.space/api/v1/mining/pools/24h", timeout=20)
     block_count = pools.get("blockCount") or 0
     rows = []
     for p in (pools.get("pools") or [])[:10]:
@@ -54,7 +48,7 @@ def fetch_mining_snapshot() -> dict[str, Any]:
     data["pools"] = rows
 
     # Avg fee rate 24h
-    fee_rows = _get_json("https://mempool.space/api/v1/mining/blocks/fee-rates/24h")
+    fee_rows = get_json("https://mempool.space/api/v1/mining/blocks/fee-rates/24h", timeout=20)
     if isinstance(fee_rows, list) and fee_rows:
         vals = [float(x.get("avgFee_10") or 0.0) for x in fee_rows]
         if vals:

@@ -21,9 +21,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
-UA = "Mozilla/5.0 KapyProvider/1.0"
 
 class EtfFlowFetchError(RuntimeError):
     """Raised when ETF flow fetch fails."""
@@ -37,16 +36,13 @@ def _safe_float(v: Any) -> float | None:
 def fetch_etf_flow_snapshot() -> dict[str, Any]:
     # 1. Fetch ETF data
     try:
-        res = requests.get("https://btcetfdata.com/v1/current.json", headers={"User-Agent": UA}, timeout=15)
-        res.raise_for_status()
-        payload = res.json()
+        payload = get_json("https://btcetfdata.com/v1/current.json", timeout=15)
     except Exception as e:
         raise EtfFlowFetchError(f"Failed to fetch btcetfdata: {e}") from e
 
     # 2. Fetch BTC price to allow downstream USD calculations
     try:
-        binance_res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=10)
-        btc_price = _safe_float(binance_res.json().get("price"))
+        btc_price = _safe_float(get_json("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=10).get("price"))
     except Exception:
         btc_price = None
 

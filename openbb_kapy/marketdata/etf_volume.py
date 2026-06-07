@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 ETF_CONFIG: dict[str, dict[str, str]] = {
@@ -42,9 +42,7 @@ class EtfVolumeFetchError(RuntimeError):
 
 def _fetch_quote(symbol: str) -> dict[str, Any] | None:
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-    resp.raise_for_status()
-    obj = resp.json()
+    obj = get_json(url, timeout=20)
     result = (((obj.get("chart") or {}).get("result") or [None])[0])
     if not result:
         return None

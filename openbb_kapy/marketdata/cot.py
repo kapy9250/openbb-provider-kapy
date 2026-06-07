@@ -10,7 +10,8 @@ import zipfile
 from datetime import datetime, timezone
 
 import pandas as pd
-import requests
+
+from .http import get_bytes
 
 CFTC_BASE = "https://www.cftc.gov/files/dea/history"
 MARKET_NAME = "BITCOIN - CHICAGO MERCANTILE EXCHANGE"
@@ -18,9 +19,7 @@ MARKET_NAME = "BITCOIN - CHICAGO MERCANTILE EXCHANGE"
 
 def _download_year(year: int) -> pd.DataFrame:
     url = f"{CFTC_BASE}/fut_fin_txt_{year}.zip"
-    resp = requests.get(url, timeout=90)
-    resp.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
+    with zipfile.ZipFile(io.BytesIO(get_bytes(url, timeout=90))) as z:
         csv_name = next(n for n in z.namelist() if n.lower().endswith(".txt"))
         with z.open(csv_name) as f:
             return pd.read_csv(f, low_memory=False)

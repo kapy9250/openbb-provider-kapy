@@ -11,25 +11,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 class DefiFetchError(RuntimeError):
     """Raised when DeFi snapshot fetch fails."""
 
 
-def _get_json(url: str) -> Any:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=25)
-    resp.raise_for_status()
-    return resp.json()
-
-
 def fetch_defi_snapshot() -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
 
-    fees_raw = _get_json("https://api.llama.fi/overview/fees")
-    stable_raw = _get_json("https://stablecoins.llama.fi/stablecoins")
-    chains_raw = _get_json("https://api.llama.fi/v2/chains")
+    fees_raw = get_json("https://api.llama.fi/overview/fees", timeout=25)
+    stable_raw = get_json("https://stablecoins.llama.fi/stablecoins", timeout=25)
+    chains_raw = get_json("https://api.llama.fi/v2/chains", timeout=25)
 
     top_protocols = sorted(
         [p for p in (fees_raw.get("protocols") or []) if (p.get("total24h") or 0) > 0],

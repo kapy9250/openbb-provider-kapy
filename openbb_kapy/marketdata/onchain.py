@@ -11,17 +11,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 class OnchainFetchError(RuntimeError):
     """Raised when on-chain snapshot fetch fails."""
-
-
-def _get_json(url: str) -> Any:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def fetch_onchain_snapshot() -> dict[str, Any]:
@@ -35,7 +29,7 @@ def fetch_onchain_snapshot() -> dict[str, Any]:
     btc = out["btc"]
 
     try:
-        stats = _get_json("https://blockchain.info/stats?format=json")
+        stats = get_json("https://blockchain.info/stats?format=json", timeout=20)
         btc["market_price_usd"] = stats.get("market_price_usd")
         btc["total_btc"] = (stats.get("totalbc") or 0) / 1e8 if stats.get("totalbc") is not None else None
         btc["blocks_size"] = stats.get("blocks_size")
@@ -47,7 +41,7 @@ def fetch_onchain_snapshot() -> dict[str, Any]:
         out["errors"].append({"source": "blockchain.info/stats", "error": str(e)})
 
     try:
-        mempool = _get_json("https://mempool.space/api/mempool")
+        mempool = get_json("https://mempool.space/api/mempool", timeout=20)
         btc["mempool"] = {
             "count": mempool.get("count"),
             "vsize": mempool.get("vsize"),
@@ -58,9 +52,10 @@ def fetch_onchain_snapshot() -> dict[str, Any]:
         out["errors"].append({"source": "mempool.space/mempool", "error": str(e)})
 
     try:
-        charts = _get_json(
+        charts = get_json(
             "https://api.blockchain.info/charts/n-unique-addresses"
-            "?timespan=2days&format=json&sampled=false"
+            "?timespan=2days&format=json&sampled=false",
+            timeout=20,
         )
         values = charts.get("values") or []
         if values:
@@ -69,7 +64,7 @@ def fetch_onchain_snapshot() -> dict[str, Any]:
         out["errors"].append({"source": "blockchain.info/charts/n-unique-addresses", "error": str(e)})
 
     try:
-        blocks = _get_json("https://mempool.space/api/v1/blocks")
+        blocks = get_json("https://mempool.space/api/v1/blocks", timeout=20)
         if isinstance(blocks, list) and blocks:
             b = blocks[0]
             btc["latest_block"] = {

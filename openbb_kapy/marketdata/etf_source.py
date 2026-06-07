@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_text
 
 
 class EtfSourceFetchError(RuntimeError):
@@ -33,9 +33,8 @@ def _safe_float(v: Any) -> float | None:
 
 
 def _next_data(url: str = "https://btcetffundflow.com/us") -> dict[str, Any]:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=25)
-    resp.raise_for_status()
-    m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', resp.text, re.S)
+    html = get_text(url, timeout=25)
+    m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.S)
     if not m:
         raise EtfSourceFetchError("__NEXT_DATA__ not found")
     return json.loads(m.group(1))

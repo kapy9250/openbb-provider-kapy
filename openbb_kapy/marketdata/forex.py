@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_text
 
 
 class ForexFetchError(RuntimeError):
@@ -18,11 +18,12 @@ class ForexFetchError(RuntimeError):
 
 
 def _stooq_last_close(symbol: str) -> float | None:
-    # Stooq lightweight CSV endpoint: SYMBOL,DATE,TIME,OPEN,HIGH,LOW,CLOSE,VOLUME,...
     url = f"https://stooq.com/q/l/?s={symbol}&i=d"
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
-    parts = [p.strip() for p in resp.text.strip().split(",")]
+    try:
+        text = get_text(url, timeout=15)
+    except Exception:
+        return None
+    parts = [p.strip() for p in text.strip().split(",")]
     if len(parts) < 7:
         return None
     close = parts[6]

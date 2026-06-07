@@ -10,17 +10,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 class StablecoinUsdeFetchError(RuntimeError):
     """Raised when USDe snapshot fetch fails."""
-
-
-def _get_json(url: str) -> Any:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def fetch_stablecoins_usde_snapshot() -> dict[str, Any]:
@@ -28,14 +22,14 @@ def fetch_stablecoins_usde_snapshot() -> dict[str, Any]:
         "https://api.coingecko.com/api/v3/simple/price"
         "?ids=ethena-usde,ethena-staked-usde&vs_currencies=usd&include_24hr_change=true"
     )
-    p = _get_json(price_url)
+    p = get_json(price_url, timeout=20)
 
     usde_price = ((p.get("ethena-usde") or {}).get("usd"))
     susde_price = ((p.get("ethena-staked-usde") or {}).get("usd"))
 
     tvl = None
     try:
-        ethena = _get_json("https://api.llama.fi/protocol/ethena")
+        ethena = get_json("https://api.llama.fi/protocol/ethena", timeout=20)
         tvl = (ethena.get("currentChainTvls") or {}).get("Ethereum")
         if tvl is None:
             hist = ethena.get("tvl") or []

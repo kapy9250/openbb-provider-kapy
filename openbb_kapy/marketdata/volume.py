@@ -8,19 +8,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
-
 from .etf_volume import ETF_CONFIG, fetch_etf_volume_snapshot
+from .http import get_json
 
 
 class VolumeFetchError(RuntimeError):
     """Raised when volume snapshot fetch fails."""
-
-
-def _get_json(url: str) -> Any:
-    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"}, timeout=25)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def _as_float(value: Any) -> float | None:
@@ -48,7 +41,7 @@ def _source_global(source: str, url: str, values: dict[str, Any]) -> dict[str, A
 def _coinpaprika_global() -> dict[str, Any]:
     url = "https://api.coinpaprika.com/v1/global"
     try:
-        d = _get_json(url) or {}
+        d = get_json(url, timeout=25) or {}
         return _source_global(
             "coinpaprika",
             url,
@@ -66,7 +59,7 @@ def _coinpaprika_global() -> dict[str, Any]:
 def _coingecko_global() -> dict[str, Any]:
     url = "https://api.coingecko.com/api/v3/global"
     try:
-        d = _get_json(url).get("data") or {}
+        d = get_json(url, timeout=25).get("data") or {}
         return _source_global(
             "coingecko",
             url,
@@ -85,7 +78,7 @@ def _coingecko_global() -> dict[str, Any]:
 def _coinlore_global() -> dict[str, Any]:
     url = "https://api.coinlore.net/api/global/"
     try:
-        payload = _get_json(url) or []
+        payload = get_json(url, timeout=25) or []
         d = payload[0] if isinstance(payload, list) and payload else {}
         return _source_global(
             "coinlore",
@@ -162,7 +155,7 @@ def _tokenized_gold() -> dict[str, Any]:
             "?ids=tether-gold,pax-gold&vs_currencies=usd"
             "&include_market_cap=true&include_24hr_vol=true"
         )
-        d = _get_json(url)
+        d = get_json(url, timeout=25)
         x = d.get("tether-gold") or {}
         p = d.get("pax-gold") or {}
         return {
@@ -177,8 +170,9 @@ def _tokenized_gold() -> dict[str, Any]:
 
 def _dex_volume() -> dict[str, Any]:
     try:
-        d = _get_json(
-            "https://api.llama.fi/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true"
+        d = get_json(
+            "https://api.llama.fi/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true",
+            timeout=25,
         )
         return {
             "total_24h": d.get("total24h"),

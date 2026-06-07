@@ -13,13 +13,12 @@ import os
 from datetime import date, datetime, timezone
 from typing import Any
 
-import requests
-
 from openbb_kapy.utils.deribit_client import DeribitClient
+
+from .http import get_json
 
 
 SHARPE_BASE_URL = "https://www.sharpe.ai/api/v1"
-UA = "Mozilla/5.0 KapyProvider/1.0"
 
 
 class OptionsSkewFetchError(RuntimeError):
@@ -78,14 +77,12 @@ def _fetch_sharpe_25d_skew_1m() -> dict[str, Any] | None:
     if not api_key:
         return None
 
-    resp = requests.get(
+    payload = get_json(
         f"{SHARPE_BASE_URL}/options/data",
-        headers={"Authorization": f"Bearer {api_key}", "User-Agent": UA},
+        headers={"Authorization": f"Bearer {api_key}"},
         params={"chart": "vol-skew", "coin": "BTC", "timeframe": "1M", "exchanges": "Deribit"},
         timeout=20,
     )
-    resp.raise_for_status()
-    payload = resp.json()
     body = payload.get("data") if isinstance(payload, dict) else {}
     points = body.get("data") if isinstance(body, dict) else []
     if not isinstance(points, list) or not points:

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
-import requests
+from .http import get_json
 
 
 BGEOMETRICS_BASE_URL = "https://api.bgeometrics.com/v1"
@@ -28,16 +28,6 @@ _SKIP_VALUE_KEYS = {"d", "date", "time", "timestamp", "unixTs", "unix_ts"}
 
 class OnchainIndicatorFetchError(RuntimeError):
     """Raised when on-chain indicator fetch fails."""
-
-
-def _get_json(url: str) -> Any:
-    resp = requests.get(
-        url,
-        headers={"User-Agent": "Mozilla/5.0 KapyProvider/1.0"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()
 
 
 def _parse_date(item: dict[str, Any]) -> date:
@@ -108,7 +98,7 @@ def fetch_bgeometrics_indicator(metric_name: str) -> list[dict[str, Any]]:
     spec = BGEOMETRICS_METRICS[metric_name]
     endpoint = spec["endpoint"]
     url = f"{BGEOMETRICS_BASE_URL}/{endpoint}"
-    payload = _get_json(url)
+    payload = get_json(url, timeout=30)
     if not isinstance(payload, list):
         raise OnchainIndicatorFetchError(f"BGeometrics {endpoint} payload is not a list")
 
