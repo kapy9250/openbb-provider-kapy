@@ -14,22 +14,11 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-import requests
-
-
-UA = "Mozilla/5.0 KapyProvider/1.0"
+from .http import get_json
 
 
 class DerivativesFetchError(RuntimeError):
     """Raised when derivatives fetch fails."""
-
-
-def _get_json(url: str, timeout: int = 15, **kwargs: Any) -> Any:
-    headers = kwargs.pop("headers", {})
-    headers.setdefault("User-Agent", UA)
-    resp = requests.get(url, headers=headers, timeout=timeout, **kwargs)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def fetch_derivatives_snapshot() -> dict[str, Any]:
@@ -38,7 +27,7 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
 
     out: dict[str, Any] = {
         "timestamp": now,
-        "binance": {"btc_funding": [], "long_short": []},
+        "binance": {"btc_funding": [], "long_short": [], "top_account": [], "top_position": []},
         "coinalyze": {"oi": [], "funding": [], "predicted_funding": [], "liquidations": []},
         "deribit": {"btc_dvol": []},
         "coinglass": {},
@@ -48,7 +37,7 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
 
     # 1) Funding (BTC)
     try:
-        funding = _get_json("https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=5")
+        funding = get_json("https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=5", timeout=15)
         if isinstance(funding, list):
             out["binance"]["btc_funding"] = [
                 {
@@ -63,10 +52,11 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
     except Exception as e:  # pragma: no cover - network dependent
         errors.append(f"funding: {e}")
 
-    # 2) Long/Short ratio
+    # 2) Global long/short ratio (all accounts)
     try:
-        ls = _get_json(
-            "https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=BTCUSDT&period=5m&limit=1"
+        ls = get_json(
+            "https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=1d&limit=1",
+            timeout=15,
         )
         if isinstance(ls, list) and ls:
             x = ls[0]
@@ -81,9 +71,47 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
     except Exception as e:  # pragma: no cover - network dependent
         errors.append(f"long_short: {e}")
 
+    # 2b) Top trader long/short ratio (accounts)
+    try:
+        ta = get_json(
+            "https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=BTCUSDT&period=1d&limit=1",
+            timeout=15,
+        )
+        if isinstance(ta, list) and ta:
+            x = ta[0]
+            out["binance"]["top_account"] = [
+                {
+                    "timestamp": int(x.get("timestamp")) if x.get("timestamp") is not None else None,
+                    "longAccount": float(x.get("longAccount")) if x.get("longAccount") is not None else None,
+                    "shortAccount": float(x.get("shortAccount")) if x.get("shortAccount") is not None else None,
+                    "longShortRatio": float(x.get("longShortRatio")) if x.get("longShortRatio") is not None else None,
+                }
+            ]
+    except Exception as e:  # pragma: no cover - network dependent
+        errors.append(f"top_account: {e}")
+
+    # 2c) Top trader long/short ratio (positions)
+    try:
+        tp = get_json(
+            "https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=1d&limit=1",
+            timeout=15,
+        )
+        if isinstance(tp, list) and tp:
+            x = tp[0]
+            out["binance"]["top_position"] = [
+                {
+                    "timestamp": int(x.get("timestamp")) if x.get("timestamp") is not None else None,
+                    "longAccount": float(x.get("longAccount")) if x.get("longAccount") is not None else None,
+                    "shortAccount": float(x.get("shortAccount")) if x.get("shortAccount") is not None else None,
+                    "longShortRatio": float(x.get("longShortRatio")) if x.get("longShortRatio") is not None else None,
+                }
+            ]
+    except Exception as e:  # pragma: no cover - network dependent
+        errors.append(f"top_position: {e}")
+
     # 3) Open interest (BTC/ETH)
     try:
-        btc_oi = _get_json("https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT")
+        btc_oi = get_json("https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT", timeout=15)
         if isinstance(btc_oi, dict) and btc_oi.get("openInterest") is not None:
             out["coinalyze"]["oi"].append(
                 {
@@ -96,7 +124,7 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
         errors.append(f"btc_oi: {e}")
 
     try:
-        eth_oi = _get_json("https://fapi.binance.com/fapi/v1/openInterest?symbol=ETHUSDT")
+        eth_oi = get_json("https://fapi.binance.com/fapi/v1/openInterest?symbol=ETHUSDT", timeout=15)
         if isinstance(eth_oi, dict) and eth_oi.get("openInterest") is not None:
             out["coinalyze"]["oi"].append(
                 {
@@ -113,10 +141,11 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
         coinalyze_key = os.environ.get("OPENBB_COINALYZE_API_KEY", "")
         if coinalyze_key:
             now_ts = int(datetime.now(timezone.utc).timestamp())
-            liq = _get_json(
+            liq = get_json(
                 "https://api.coinalyze.net/v1/liquidation-history",
                 params={"symbols": "BTCUSD_PERP.A", "interval": "daily", "from": str(now_ts - 86400), "to": str(now_ts)},
                 headers={"api_key": coinalyze_key},
+                timeout=15,
             )
             if isinstance(liq, list):
                 for item in liq:
