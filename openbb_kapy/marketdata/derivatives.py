@@ -27,7 +27,7 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
 
     out: dict[str, Any] = {
         "timestamp": now,
-        "binance": {"btc_funding": [], "long_short": [], "top_account": [], "top_position": []},
+        "binance": {"btc_funding": [], "long_short": [], "top_account": [], "top_position": [], "taker_ratio": []},
         "coinalyze": {"oi": [], "funding": [], "predicted_funding": [], "liquidations": []},
         "deribit": {"btc_dvol": []},
         "coinglass": {},
@@ -108,6 +108,25 @@ def fetch_derivatives_snapshot() -> dict[str, Any]:
             ]
     except Exception as e:  # pragma: no cover - network dependent
         errors.append(f"top_position: {e}")
+
+    # 2d) Taker buy/sell ratio
+    try:
+        tr = get_json(
+            "https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=BTCUSDT&period=1d&limit=1",
+            timeout=15,
+        )
+        if isinstance(tr, list) and tr:
+            x = tr[0]
+            out["binance"]["taker_ratio"] = [
+                {
+                    "timestamp": int(x.get("timestamp")) if x.get("timestamp") is not None else None,
+                    "buySellRatio": float(x.get("buySellRatio")) if x.get("buySellRatio") is not None else None,
+                    "buyVol": float(x.get("buyVol")) if x.get("buyVol") is not None else None,
+                    "sellVol": float(x.get("sellVol")) if x.get("sellVol") is not None else None,
+                }
+            ]
+    except Exception as e:  # pragma: no cover - network dependent
+        errors.append(f"taker_ratio: {e}")
 
     # 3) Open interest (BTC/ETH)
     try:
