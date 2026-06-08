@@ -22,6 +22,7 @@ def _request(
     timeout: int = 20,
     headers: dict | None = None,
     params: dict | None = None,
+    proxies: dict | None = None,
     retries: int = 3,
     backoff: float = 1.0,
 ) -> requests.Response:
@@ -32,7 +33,7 @@ def _request(
     last_exc: Exception | None = None
     for attempt in range(retries):
         try:
-            resp = requests.get(url, headers=h, params=params, timeout=timeout)
+            resp = requests.get(url, headers=h, params=params, proxies=proxies, timeout=timeout)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
@@ -55,12 +56,13 @@ def get_json(
     timeout: int = 20,
     headers: dict | None = None,
     params: dict | None = None,
+    proxies: dict | None = None,
     retries: int = 3,
     backoff: float = 1.0,
 ) -> Any:
     """GET url and return parsed JSON. Retries on transient errors."""
     return _request(
-        url, timeout=timeout, headers=headers, params=params,
+        url, timeout=timeout, headers=headers, params=params, proxies=proxies,
         retries=retries, backoff=backoff,
     ).json()
 

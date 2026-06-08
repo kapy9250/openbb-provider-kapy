@@ -20,6 +20,10 @@ BGEOMETRICS_METRICS: dict[str, dict[str, str]] = {
     "asopr": {"endpoint": "asopr", "value_key": "asopr"},
     "sth_sopr": {"endpoint": "sth-sopr", "value_key": "sth_sopr"},
     "lth_sopr": {"endpoint": "lth-sopr", "value_key": "lth_sopr"},
+    "mvrv_ratio": {"endpoint": "mvrv", "value_key": "mvrv"},
+    "mvrv_zscore": {"endpoint": "mvrv-zscore", "value_key": "mvrvZscore"},
+    "puell_multiple": {"endpoint": "puell-multiple", "value_key": "puellMultiple"},
+    "nupl": {"endpoint": "nupl", "value_key": "nupl"},
 }
 
 _DATE_KEYS = ("d", "date", "time", "timestamp")
@@ -90,7 +94,11 @@ def _sort_key(item: dict[str, Any]) -> tuple[str, float]:
     return (_parse_date(item).isoformat(), ts)
 
 
-def fetch_bgeometrics_indicator(metric_name: str) -> list[dict[str, Any]]:
+def fetch_bgeometrics_indicator(
+    metric_name: str,
+    api_key: str | None = None,
+    proxies: dict | None = None,
+) -> list[dict[str, Any]]:
     """Fetch one BGeometrics indicator and normalize it to daily records."""
     if metric_name not in BGEOMETRICS_METRICS:
         raise ValueError(f"unsupported BGeometrics metric: {metric_name}")
@@ -98,7 +106,8 @@ def fetch_bgeometrics_indicator(metric_name: str) -> list[dict[str, Any]]:
     spec = BGEOMETRICS_METRICS[metric_name]
     endpoint = spec["endpoint"]
     url = f"{BGEOMETRICS_BASE_URL}/{endpoint}"
-    payload = get_json(url, timeout=30)
+    headers = {"x-api-key": api_key} if api_key else None
+    payload = get_json(url, timeout=30, headers=headers, proxies=proxies)
     if not isinstance(payload, list):
         raise OnchainIndicatorFetchError(f"BGeometrics {endpoint} payload is not a list")
 
