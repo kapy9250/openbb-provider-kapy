@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+import requests
+
 from .http import get_json
 
 
@@ -32,6 +34,21 @@ _SKIP_VALUE_KEYS = {"d", "date", "time", "timestamp", "unixTs", "unix_ts"}
 
 class OnchainIndicatorFetchError(RuntimeError):
     """Raised when on-chain indicator fetch fails."""
+
+
+def _bgeometrics_http_error(endpoint: str, exc: requests.exceptions.HTTPError) -> OnchainIndicatorFetchError:
+    status_code = exc.response.status_code if exc.response is not None else None
+    if status_code in {401, 403}:
+        return OnchainIndicatorFetchError(
+            f"BGeometrics API key invalid (HTTP {status_code}) for endpoint '{endpoint}'; "
+            "set a valid BGEOMETRICS_API_KEY"
+        )
+    if status_code == 429:
+        return OnchainIndicatorFetchError(
+            f"BGeometrics API rate-limited/quota exceeded (HTTP 429) for endpoint '{endpoint}'; "
+            "wait for quota reset or reduce request frequency"
+        )
+    return OnchainIndicatorFetchError(f"BGeometrics {endpoint} HTTP error: {exc}")
 
 
 def _parse_date(item: dict[str, Any]) -> date:
@@ -107,7 +124,10 @@ def fetch_bgeometrics_indicator(
     endpoint = spec["endpoint"]
     url = f"{BGEOMETRICS_BASE_URL}/{endpoint}"
     headers = {"x-api-key": api_key} if api_key else None
-    payload = get_json(url, timeout=30, headers=headers, proxies=proxies)
+    try:
+        payload = get_json(url, timeout=30, headers=headers, proxies=proxies)
+    except requests.exceptions.HTTPError as exc:
+        raise _bgeometrics_http_error(endpoint, exc) from exc
     if not isinstance(payload, list):
         raise OnchainIndicatorFetchError(f"BGeometrics {endpoint} payload is not a list")
 
