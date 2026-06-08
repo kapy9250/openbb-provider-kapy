@@ -6,6 +6,7 @@ Source:
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -111,6 +112,12 @@ def _sort_key(item: dict[str, Any]) -> tuple[str, float]:
     return (_parse_date(item).isoformat(), ts)
 
 
+def _resolve_bgeometrics_api_key(api_key: str | None) -> str | None:
+    if api_key is not None:
+        return api_key
+    return os.getenv("BGEOMETRICS_API_KEY") or None
+
+
 def fetch_bgeometrics_indicator(
     metric_name: str,
     api_key: str | None = None,
@@ -164,15 +171,22 @@ def fetch_bgeometrics_indicator(
     return records
 
 
-def fetch_bgeometrics_indicators(metric_names: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
+def fetch_bgeometrics_indicators(
+    metric_names: list[str] | None = None,
+    api_key: str | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Fetch multiple BGeometrics indicators keyed by metric name."""
     names = metric_names or list(BGEOMETRICS_METRICS)
-    return {name: fetch_bgeometrics_indicator(name) for name in names}
+    resolved_api_key = _resolve_bgeometrics_api_key(api_key)
+    return {name: fetch_bgeometrics_indicator(name, api_key=resolved_api_key) for name in names}
 
 
-def fetch_latest_bgeometrics_indicator(metric_name: str = "sopr") -> dict[str, Any]:
+def fetch_latest_bgeometrics_indicator(
+    metric_name: str = "sopr",
+    api_key: str | None = None,
+) -> dict[str, Any]:
     """Fetch one indicator and return its latest normalized daily record."""
-    records = fetch_bgeometrics_indicator(metric_name)
+    records = fetch_bgeometrics_indicator(metric_name, api_key=_resolve_bgeometrics_api_key(api_key))
     if not records:
         raise OnchainIndicatorFetchError(f"BGeometrics {metric_name} returned no records")
     return records[-1]
