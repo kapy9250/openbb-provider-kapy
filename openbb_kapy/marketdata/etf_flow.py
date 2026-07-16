@@ -70,7 +70,10 @@ def fetch_etf_flow_snapshot() -> dict[str, Any]:
         top_flows.append({
             "ticker": ticker.upper(),
             "flow_btc": flow_btc,
-            "flow_usd_million": flow_usd_million
+            "flow_usd_million": flow_usd_million,
+            # 各基金 holdings 快照的 as-of 日各不相同（同一时刻可能混杂 3 个日期），
+            # 逐项透传 dt 供下游按真实归属日落库，勿用顶层 updated_date（=max(dt)）代替
+            "dt": item.get("dt"),
         })
 
     # Sort top flows by absolute BTC flow, taking top 5 (consistent with old behavior)
